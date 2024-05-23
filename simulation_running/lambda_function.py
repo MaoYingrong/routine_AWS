@@ -6,8 +6,6 @@ import mysql.connector
 from collections.abc import Iterable, Mapping
 from typing import Any, Union
 import itertools
-import uuid
-import numpy as np
 
 
 rds = boto3.client('rds')
@@ -81,11 +79,12 @@ def make_combination_list(parameters: Mapping[str, Union[Any, Iterable[Any]]],
 
     kwargs_list = []
     for kwargs in all_kwargs:
-        # Create a unique identifier for each combination
-        unique_id = str(uuid.uuid4())
-        # Convert tuple pairs into a dictionary and add the unique ID
         kwargs_dict = dict(kwargs)
-        kwargs_dict['combination_id'] = unique_id
+        # Create a unique identifier for each combination
+        combination_value = ""
+        for key, value in kwargs_dict.items():
+            combination_value += f"{key}{value}"
+        kwargs_dict['combination_id'] = combination_value
         kwargs_list.append(kwargs_dict)
 
     return kwargs_list
@@ -101,9 +100,10 @@ def lambda_handler(event, context):
     runs_list = []
     run_id = 0
 
+    iteration = event.pop("iterations")
     combination_list = make_combination_list(event)
-
-    for iteration in range(50):
+    
+    for iteration in range(iteration):
         for kwargs in combination_list:
             runs_list.append((run_id, iteration, kwargs))
             run_id += 1
@@ -119,22 +119,23 @@ def lambda_handler(event, context):
         reusults_lst = process_func(run)
         for data in reusults_lst:
             del data["Time"]
-            # data["combination_id"] = str(data["combination_id"])
             data["time_lst"] = str(data["time_lst"])
             data["actor_sequence_lst"] = str(data["actor_sequence_lst"])
             cur.execute(sql_insert_query, (tuple(data.values())*2))
             
     conn.commit()
+    conn.close()
     print("Data inserted successfully for ", event["num_nodes"])
     
 # if __name__ == "__main__":
 
-    # event = {"num_tasks": 8,
-    #          "num_nodes": 20,
-    #          "num_new_edges": 2,
-    #          "skills_proportion": np.linspace(0.1, 0.2, 2),
-    #          "prob_memory": 0.5,
-    #          "availablity": 0.5}
+#     event = {"iterations": 50,
+#              "num_tasks": 8,
+#              "num_nodes": 20,
+#              "num_new_edges": 2,
+#              "skills_proportion": np.linspace(0.1, 0.2, 2),
+#              "prob_memory": 0.5,
+#              "availablity": 0.5}
 
 #     lambda_handler(event, None)
 #     cur.execute("SELECT COUNT(*) FROM simulation_data;")
